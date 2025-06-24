@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>EMD Locomotive Maintenance AI Assistant</title>
+    <meta name="theme-color" content="#1a1a2e">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+    <script>
+        // Set the worker source for PDF.js to load the PDF worker script
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js';
+    </script>
+    <style>
+        /* Base styles and reset */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            /* Set base properties for the document */
+            height: 100%;
+        }
+
+        body {
+            /* Body acts as the main viewport-sized container */
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            background: #0d0d0d;
+            color: #e0e0e0;
+            /* Height will be dynamically controlled by JS for mobile keyboard compatibility */
+            /* Using 100vh as a fallback for desktop */
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden; /* Prevent the body itself from scrolling */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            /* The main application container that holds all UI elements */
+            width: 100%;
+            height: 100%; /* Take up all space of the resized body */
+            max-width: 100%;
+            display: flex;
+            flex-direction: column;
+            background: #1a1a1a;
+            overflow: hidden; /* Important: prevents children from overflowing the container */
+        }
+
+        /* Header styling */
+        .header {
+            background: linear-gradient(135deg, #1c1c2f 0%, #151e30 100%);
+            padding: 1.2rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            position: relative;
+            overflow: hidden;
+            border-bottom: 1px solid #333;
+            flex-shrink: 0; /* Prevent header from shrinking */
+            z-index: 10;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,107,0,0.15) 0%, transparent 70%);
+            animation: pulse 4s ease-in-out infinite;
+            z-index: 0;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+        }
+
+        .header h1 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: #ff8c00;
+            text-align: center;
+            position: relative;
+            z-index: 1;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            text-shadow: 0 0 8px rgba(255,140,0,0.5);
+        }
+
+        .header p {
+            text-align: center;
+            color: #a0a0a0;
+            font-size: 0.95rem;
+            margin-top: 0.6rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Documents bar styling */
+        .documents-bar {
+            background: #222222;
+            padding: 0.6rem 1rem;
+            border-bottom: 1px solid #3a3a3a;
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            font-size: 0.88rem;
+            flex-wrap: wrap;
+            box-shadow: inset 0 -2px 5px rgba(0,0,0,0.2);
+            flex-shrink: 0;
+        }
+
+        .document-tag {
+            background: #333333;
+            border: 1px solid #555555;
+            padding: 0.3rem 0.8rem;
+            border-radius: 18px;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            color: #ff9933;
+            font-size: 0.82rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+
+        .document-tag .remove {
+            cursor: pointer;
+            color: #bbb;
+            font-weight: bold;
+            transition: color 0.3s;
+        }
+
+        .document-tag .remove:hover { color: #ff4444; }
+
+        /* Chat container styling */
+        .chat-container {
+            flex-grow: 1; /* This is crucial: makes the chat area fill available space */
+            overflow-y: auto; /* Enable vertical scrolling ONLY for the chat area */
+            padding: 1rem;
+            background: #0d0d0d;
+            scroll-behavior: smooth;
+            min-height: 0; /* A critical fix for flexbox scrolling on some browsers */
+        }
+
+        .message {
+            margin-bottom: 1.2rem;
+            animation: fadeIn 0.4s ease-out;
+            display: flex;
+            flex-direction: column;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user { align-items: flex-end; }
+        .message.bot { align-items: flex-start; }
+
+        .message-content {
+            display: inline-block;
+            padding: 0.85rem 1.2rem;
+            border-radius: 20px;
+            max-width: 85%;
+            word-wrap: break-word;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.4);
+        }
+
+        .user .message-content {
+            background: linear-gradient(135deg, #ff6b00 0%, #ff8533 100%);
+            color: white;
+            border: 1px solid #ff5500;
+        }
+
+        .bot .message-content {
+            background: #282828;
+            border: 1px solid #444444;
+            color: #e0e0e0;
+        }
+        
+        .bot .message-content ul { padding-left: 1.7rem; margin-top: 0.5rem; }
+        .bot .message-content li { margin-bottom: 0.3rem; }
+        .bot .message-content code { background: #3a3a3a; padding: 3px 8px; border-radius: 5px; font-family: 'Courier New', monospace; color: #aaddff; }
+
+        /* Quick actions styling */
+        .quick-actions {
+            padding: 0.8rem 1rem;
+            background: #222222;
+            border-top: 1px solid #3a3a3a;
+            display: flex;
+            gap: 0.7rem;
+            overflow-x: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #555 #222;
+            -webkit-overflow-scrolling: touch;
+            flex-shrink: 0;
+            /* FIX: Add min-width to prevent flex items from overflowing their container */
+            /* This ensures the scrollbar activates correctly without pushing the parent layout. */
+            min-width: 0;
+        }
+        .quick-actions::-webkit-scrollbar { height: 8px; }
+        .quick-actions::-webkit-scrollbar-track { background: #222; }
+        .quick-actions::-webkit-scrollbar-thumb { background-color: #555; border-radius: 10px; border: 2px solid #222; }
+
+        .quick-action {
+            background: #3a3a3a;
+            border: 1px solid #555555;
+            color: #e0e0e0;
+            padding: 0.6rem 1.1rem;
+            border-radius: 22px;
+            font-size: 0.9rem;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        .quick-action:hover { background: #4a4a4a; border-color: #ff9933; color: #ff9933; transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.4); }
+
+        /* Input area styling */
+        .input-container {
+            padding: 0.8rem 1rem;
+            background: #222222;
+            border-top: 1px solid #3a3a3a;
+            display: flex;
+            gap: 0.6rem;
+            align-items: center;
+            flex-shrink: 0; /* Prevent input area from shrinking */
+        }
+
+        .input-wrapper {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            background: #3a3a3a;
+            border-radius: 28px;
+            padding: 0.6rem 1.2rem;
+            border: 1px solid #555555;
+            transition: all 0.3s ease;
+        }
+
+        .input-wrapper:focus-within {
+            border-color: #ff9933;
+            box-shadow: 0 0 12px rgba(255,153,51,0.5);
+        }
+
+        #messageInput {
+            flex: 1;
+            background: none;
+            border: none;
+            color: #f0f0f0;
+            font-size: 1.05rem;
+            outline: none;
+            padding: 0;
+        }
+
+        /* Button styling */
+        .button {
+            background: linear-gradient(135deg, #ff6b00 0%, #ff8533 100%);
+            color: white;
+            border: none;
+            padding: 0.8rem;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            width: 50px;
+            height: 50px;
+            min-width: 50px;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 5px 18px rgba(255,107,0,0.4), inset 0 2px 5px rgba(255,255,255,0.2);
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+            flex-shrink: 0;
+        }
+        .button:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 8px 25px rgba(255,107,0,0.5), inset 0 2px 7px rgba(255,255,255,0.3); }
+        .button:active { transform: translateY(0) scale(0.98); box-shadow: 0 2px 8px rgba(255,107,0,0.3), inset 0 1px 3px rgba(0,0,0,0.2); }
+
+        .voice-button.recording {
+            background: linear-gradient(135deg, #ff0000 0%, #ff4444 100%);
+            animation: pulse-record 1.5s ease-in-out infinite;
+            box-shadow: 0 0 20px rgba(255,0,0,0.7);
+        }
+
+        @keyframes pulse-record {
+            0% { box-shadow: 0 0 15px rgba(255,0,0,0.3), inset 0 0 5px rgba(255,255,255,0.2); }
+            50% { box-shadow: 0 0 25px rgba(255,0,0,0.8), inset 0 0 8px rgba(255,255,255,0.4); }
+            100% { box-shadow: 0 0 15px rgba(255,0,0,0.3), inset 0 0 5px rgba(255,255,255,0.2); }
+        }
+
+        /* Other UI elements */
+        .voice-indicator { position: fixed; bottom: 120px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.95); color: white; padding: 1.2rem 2.5rem; border-radius: 30px; border: 3px solid #ff0000; display: none; animation: fadeIn 0.3s ease-out; z-index: 1000; font-size: 1.1rem; font-weight: 600; text-shadow: 0 0 10px rgba(255,0,0,0.8); }
+        .voice-indicator.active { display: block; }
+
+        .file-input-label { cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .image-preview { max-width: 180px; max-height: 180px; border-radius: 10px; margin-top: 0.8rem; border: 2px solid #555; object-fit: contain; box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
+
+        /* Typing indicator dots */
+        .typing-indicator { display: inline-flex; align-items: center; gap: 5px; padding: 0.8rem 1.2rem; background: #282828; border: 1px solid #444444; border-radius: 20px; }
+        .typing-dot { width: 10px; height: 10px; background: #ff6b00; border-radius: 50%; animation: typing 1.4s infinite; }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing { 0%, 60%, 100% { transform: translateY(0); opacity: 0.5; } 30% { transform: translateY(-12px); opacity: 1; } }
+
+        /* Responsive adjustments for larger screens */
+        @media (min-width: 768px) {
+            .container {
+                max-width: 800px;
+                height: 95vh;
+                margin: auto;
+                border-radius: 16px;
+                box-shadow: 0 0 40px rgba(0,0,0,0.6);
+            }
+            .message-content {
+                max-width: 70%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>EMD Maintenance AI</h1>
+            <p>Technical Assistant for Locomotive Engines</p>
+        </div>
+
+        <div class="documents-bar" id="documentsBar" style="display: none;">
+            <span style="color: #a0a0a0; font-size: 0.8rem;">Loaded docs:</span>
+        </div>
+
+        <div class="quick-actions">
+            <button class="quick-action" onclick="sendQuickMessage('How do I check oil pressure?')">Oil Pressure Check</button>
+            <button class="quick-action" onclick="sendQuickMessage('Turbocharger maintenance schedule')">Turbo Maintenance</button>
+            <button class="quick-action" onclick="sendQuickMessage('Injector troubleshooting')">Injector Issues</button>
+            <button class="quick-action" onclick="sendQuickMessage('Engine won\'t start')">Starting Problems</button>
+            <button class="quick-action" onclick="sendQuickMessage('Cooling system check')">Cooling System</button>
+        </div>
+
+        <div class="chat-container" id="chatContainer">
+            <div class="message bot">
+                <div class="message-content">
+                    Welcome to EMD Maintenance AI Assistant! I can help you with:
+                    <ul>
+                        <li>Maintenance procedures and schedules</li>
+                        <li>Troubleshooting engine issues</li>
+                        <li>Parts identification (upload images)</li>
+                        <li>Technical specifications</li>
+                        <li>Safety protocols</li>
+                    </ul>
+                    💡 <strong>Features:</strong><br>
+                    🎤 Voice input - tap the microphone<br>
+                    📷 Image upload - for part identification (includes OCR)<br>
+                    📄 Document upload - PDF/TXT manuals for AI to reference (includes PDF OCR)<br><br>
+                    How can I assist you today?
+                </div>
+            </div>
+        </div>
+
+        <div class="voice-indicator" id="voiceIndicator">
+            🎤 Listening... Speak your question
+        </div>
+
+        <div class="input-container">
+            <label class="button file-input-label" for="fileInput" title="Upload image">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+            </label>
+            <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="handleFileUpload(event)">
+            
+            <label class="button file-input-label" for="documentInput" title="Upload document">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            </label>
+            <input type="file" id="documentInput" accept=".pdf,.txt" style="display: none;" onchange="handleDocumentUpload(event)">
+            
+            <button class="button voice-button" id="voiceButton" onclick="toggleVoiceInput()" title="Voice input">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+            </button>
+            
+            <div class="input-wrapper">
+                <input type="text" id="messageInput" placeholder="Ask about maintenance, parts, or troubleshooting..." onkeypress="handleKeyPress(event)">
+            </div>
+            
+            <button class="button" onclick="sendMessage()" title="Send message">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- Globals ---
+        let uploadedDocuments = [];
+        let chatHistory = [];
+        let recognition = null;
+        let isRecording = false;
+
+        // --- Constants ---
+        const systemKnowledge = `You are an EMD Locomotive Maintenance AI Assistant. Your goal is to provide accurate, helpful, and concise information based on your internal knowledge and any provided documents or image analyses. Assume all questions relate to EMD locomotives unless specified otherwise. Provide direct, actionable answers.`;
+        
+        /**
+         * Initializes the application once the DOM is fully loaded.
+         * Sets up listeners and prepares the initial state.
+         */
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize chat history with the system instruction
+            chatHistory.push({ role: "user", parts: [{ text: systemKnowledge }] });
+            chatHistory.push({ role: "model", parts: [{ text: "Okay, I'm ready to assist with EMD locomotive maintenance." }] });
+            
+            setupSpeechRecognition();
+            setupViewportListener();
+            setupInputFocusListener();
+
+            // PWA Service Worker Registration
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(reg => console.log('Service Worker registered.', reg))
+                    .catch(err => console.error('Service Worker registration failed:', err));
+            }
+        });
+
+
+        // --- Core Chat Logic ---
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        function sendQuickMessage(message) {
+            document.getElementById('messageInput').value = message;
+            sendMessage();
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const userMessage = input.value.trim();
+            if (userMessage === '') return;
+            
+            addMessage(userMessage, 'user');
+            input.value = '';
+            showTypingIndicator();
+            
+            try {
+                let promptParts = [{ text: userMessage }];
+                uploadedDocuments.forEach(doc => {
+                    let context = doc.parsed ? doc.content : doc.ocr_results;
+                    if (context) {
+                         promptParts.push({ text: `\n\n--- Reference Document: ${doc.name} ---\n${context}\n--- End Document ---\n` });
+                    }
+                });
+
+                chatHistory.push({ role: "user", parts: [...promptParts] });
+
+                const payload = { contents: chatHistory, safetySettings: [ { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" } ] };
+                const apiKey = ""; // Provided at runtime
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                const result = await response.json();
+                
+                if (result.candidates && result.candidates.length > 0) {
+                    const aiResponseText = result.candidates[0].content.parts[0].text;
+                    addMessage(aiResponseText, 'bot');
+                    chatHistory.push({ role: "model", parts: [{ text: aiResponseText }] });
+                } else {
+                    addMessage('I could not generate a response. The model may have returned empty content, possibly due to safety filters. Please try rephrasing.', 'bot');
+                }
+            } catch (error) {
+                console.error('Error calling Gemini API:', error);
+                addMessage('An error occurred while communicating with the AI. Please check the console for details.', 'bot');
+            } finally {
+                removeTypingIndicator();
+            }
+        }
+
+        // --- File & Document Handling ---
+        
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = error => reject(error);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function renderPdfPageToImage(page) {
+            const scale = 1.5;
+            const viewport = page.getViewport({ scale });
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+            await page.render({ canvasContext: context, viewport }).promise;
+            return canvas.toDataURL('image/png').split(',')[1];
+        }
+
+        async function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file || !file.type.startsWith('image/')) return;
+
+            const imageUrl = URL.createObjectURL(file);
+            addMessage(`<img src="${imageUrl}" class="image-preview" alt="Uploaded image">`, 'user', true);
+            showTypingIndicator();
+
+            try {
+                const base64ImageData = await fileToBase64(file);
+                const prompt = "Analyze this image for EMD locomotive components, gauges, or diagnostic info. Perform OCR on any text. Summarize your findings concisely.";
+                const payload = { contents: [{ role: "user", parts: [{ text: prompt }, { inlineData: { mimeType: file.type, data: base64ImageData } }] }] };
+                const result = await callGemini(payload);
+
+                const aiResponseText = result.candidates[0].content.parts[0].text;
+                addMessage(`*Image Analysis:*\n${aiResponseText}`, 'bot');
+                uploadedDocuments.push({ name: `Image: ${file.name.substring(0,15)}...`, ocr_results: aiResponseText, analyzed: true });
+                updateDocumentsBar();
+            } catch (error) {
+                console.error('Image analysis error:', error);
+                addMessage('An error occurred during image analysis.', 'bot');
+            } finally {
+                removeTypingIndicator();
+                URL.revokeObjectURL(imageUrl);
+                event.target.value = '';
+            }
+        }
+
+        async function handleDocumentUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            addMessage(`Loading "${file.name}"...`, 'bot');
+            showTypingIndicator();
+
+            try {
+                if (file.type === 'text/plain') {
+                    const content = await file.text();
+                    uploadedDocuments.push({ name: file.name, content: content, parsed: true });
+                    addMessage(`I've processed "${file.name}" and will use it as a reference.`, 'bot');
+                } else if (file.type === 'application/pdf') {
+                    const pdfData = new Uint8Array(await file.arrayBuffer());
+                    const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise;
+                    let fullText = '';
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const textContent = await page.getTextContent();
+                        fullText += textContent.items.map(item => item.str).join(' ') + '\n';
+                    }
+                    uploadedDocuments.push({ name: file.name, content: fullText, parsed: true });
+                    addMessage(`I've extracted the text from "${file.name}" and will use it as reference.`, 'bot');
+                } else {
+                    addMessage('Unsupported format. Please upload .txt or .pdf files.', 'bot');
+                }
+            } catch (error) {
+                console.error('Document upload error:', error);
+                addMessage(`Failed to process "${file.name}". It may be corrupted or a scanned PDF.`, 'bot');
+            } finally {
+                removeTypingIndicator();
+                updateDocumentsBar();
+                event.target.value = '';
+            }
+        }
+
+        async function callGemini(payload) {
+             const apiKey = "";
+             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+             const response = await fetch(apiUrl, {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify(payload)
+             });
+             if (!response.ok) throw new Error(`API Error: ${response.status}`);
+             const result = await response.json();
+             if (!result.candidates || result.candidates.length === 0) {
+                 throw new Error('No content from API, check safety settings or prompt.');
+             }
+             return result;
+        }
+
+        // --- UI & Display Logic ---
+
+        function addMessage(content, sender, isHtml = false) {
+            const chatContainer = document.getElementById('chatContainer');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            
+            if (isHtml) {
+                contentDiv.innerHTML = content;
+            } else {
+                contentDiv.innerHTML = formatBotMessage(content);
+            }
+            
+            messageDiv.appendChild(contentDiv);
+            chatContainer.appendChild(messageDiv);
+            messageDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }
+        
+        function formatBotMessage(text) {
+            return text
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/`(.*?)`/g, '<code>$1</code>')
+                .replace(/^- (.*$)/gm, '<ul><li>$1</li></ul>').replace(/<\/ul>\s?<ul>/g, '')
+                .replace(/\n/g, '<br>');
+        }
+
+        function showTypingIndicator() {
+            if (document.querySelector('.typing-message')) return;
+            const chatContainer = document.getElementById('chatContainer');
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'message bot typing-message';
+            typingDiv.innerHTML = `<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
+            chatContainer.appendChild(typingDiv);
+            typingDiv.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }
+
+        function removeTypingIndicator() {
+            document.querySelector('.typing-message')?.remove();
+        }
+
+        function updateDocumentsBar() {
+            const bar = document.getElementById('documentsBar');
+            bar.style.display = uploadedDocuments.length > 0 ? 'flex' : 'none';
+            bar.innerHTML = '<span style="color: #a0a0a0; font-size: 0.8rem; flex-shrink: 0;">Loaded docs:</span>';
+            uploadedDocuments.forEach((doc, index) => {
+                const tag = document.createElement('div');
+                tag.className = 'document-tag';
+                let statusIcon = doc.parsed ? '✓' : '👁️';
+                tag.innerHTML = `📄 ${doc.name} (${statusIcon}) <span class="remove" onclick="removeDocument(${index})" title="Remove document">×</span>`;
+                bar.appendChild(tag);
+            });
+        }
+
+        function removeDocument(index) {
+            uploadedDocuments.splice(index, 1);
+            updateDocumentsBar();
+            addMessage('Document removed from reference library.', 'bot');
+        }
+
+        // --- Voice Recognition ---
+        
+        function setupSpeechRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (SpeechRecognition) {
+                recognition = new SpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = false;
+                recognition.lang = 'en-US';
+                
+                recognition.onstart = () => { isRecording = true; document.getElementById('voiceButton').classList.add('recording'); document.getElementById('voiceIndicator').classList.add('active'); };
+                recognition.onend = () => { isRecording = false; document.getElementById('voiceButton').classList.remove('recording'); document.getElementById('voiceIndicator').classList.remove('active'); };
+                recognition.onresult = (event) => { const transcript = event.results[0][0].transcript; document.getElementById('messageInput').value = transcript; if (transcript) sendMessage(); };
+                recognition.onerror = (event) => { console.error('Speech recognition error:', event.error); addMessage(`Voice error: ${event.error}`, 'bot'); };
+            }
+        }
+
+        function toggleVoiceInput() {
+            if (!recognition) { addMessage('Voice input is not supported in this browser.', 'bot'); return; }
+            isRecording ? recognition.stop() : recognition.start();
+        }
+
+        // --- MOBILE KEYBOARD & VIEWPORT FIX ---
+        
+        /**
+         * Sets up listeners to handle the mobile viewport, especially when the
+         * on-screen keyboard appears. This is the primary fix for the "cut off" screen issue.
+         */
+        function setupViewportListener() {
+            if (window.visualViewport) {
+                const viewportHandler = () => {
+                    // Set the body's height to match the visual viewport's height.
+                    // This resizes the entire app to fit the visible area, above the keyboard.
+                    document.body.style.height = `${window.visualViewport.height}px`;
+                };
+                
+                window.visualViewport.addEventListener('resize', viewportHandler);
+                // Run it once on load to set the initial size correctly.
+                viewportHandler();
+            }
+        }
+
+        /**
+         * Adds a listener to the input field. When it's focused, we scroll it
+         * into view to ensure it's not hidden by the keyboard.
+         */
+        function setupInputFocusListener() {
+            const input = document.getElementById('messageInput');
+            input.addEventListener('focus', () => {
+                 setTimeout(() => {
+                    input.scrollIntoView({ behavior: "smooth", block: "end" });
+                }, 300); // A small delay helps ensure keyboard animation is complete.
+            });
+        }
+
+    </script>
+</body>
+</html>
+
